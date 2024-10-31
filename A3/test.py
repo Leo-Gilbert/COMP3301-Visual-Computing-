@@ -1,117 +1,107 @@
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
-import matplotlib.image as mpimg
-import matplotlib.gridspec as gridspec
-from PyQt5.QtWidgets import QApplication, QFileDialog, QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
 
-def plot_histograms(image, ax):
-    ax.clear()
+
+def compute_threshold(channel, initial_threshold=128, epsilon=1):
+    """
+    Compute the optimal threshold for a single channel using the iterative mean method.
+    """
+    T = initial_threshold  # Initial threshold guess
+
+    # Debugging: Initial condition
+    print(f"\nStarting threshold computation for channel with initial T = {T}")
+
+    while True:
+        # Group pixels based on the current threshold
+        G1 = channel[channel <= T]
+        G2 = channel[channel > T]
+
+        # Check if groups are empty and handle this edge case
+        if G1.size == 0 or G2.size == 0:
+            print("One of the groups is empty, returning initial threshold.")
+            return T
+
+        # Compute mean intensity of both groups
+        mu1 = np.mean(G1)
+        mu2 = np.mean(G2)
+
+        # Update the threshold
+        T_new = (mu1 + mu2) / 2
+
+        # Debugging: Print the new threshold value for each iteration
+        print(f"Updated threshold: T_new = {T_new}")
+
+        # Check for convergence
+        if abs(T - T_new) < epsilon:
+            break
+
+        T = T_new  # Update threshold for next iteration
+
+    print(f"Final threshold for channel: {T}")
+    return T
+
+
+def plot_histograms(image):
+    """
+    Plot histograms of each color channel to understand the pixel distribution.
+    """
+    colors = ['Red', 'Green', 'Blue']
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    for i in range(3):
+        channel = image[:, :, i]
+        axes[i].hist(channel.flatten(), bins=256, color=colors[i].lower(), alpha=0.7)
+        axes[i].set_title(f'{colors[i]} Channel Histogram')
+
+    plt.show()
+
+
+def automatic(image, initial_threshold=128, epsilon=1):
+    """
+    Perform automatic thresholding on an image.
+    Works for both grayscale and RGB images.
+    """
+    thresholds = []
     if len(image.shape) == 2:  # Grayscale image
-        ax.hist(image.ravel(), range(256), color='gray', alpha=0.5, histtype='step', label='Grayscale', density=True)
-    else:  # Color image (3 channels)
-        r, g, b = image[:, :, 0] * 255, image[:, :, 1] * 255, image[:, :, 2] * 255
-        ax.hist(r.ravel(), bins=range(256), color='r', alpha=0.5, histtype='step', label='Red Channel', density=True)
-        ax.hist(g.ravel(), bins=range(256), color='g', alpha=0.5, histtype='step', label='Green Channel', density=True)
-        ax.hist(b.ravel(), bins=range(256), color='b', alpha=0.5, histtype='step', label='Blue Channel', density=True)
+        threshold = compute_threshold(image, initial_threshold, epsilon)
+        thresholds.append(threshold)
+        binary_image = np.where(image > threshold, 255, 0).astype(np.uint8)
+        return binary_image
 
-def update_image(ax_img, ax_hist, img):
-    ax_img.clear()
-    ax_img.imshow(img, cmap='Greys_r')
-    ax_img.axis('off')
-    plot_histograms(img, ax_hist)
-    plt.draw()
+    else:  # RGB image
+        binary_image = np.zeros_like(image, dtype=np.uint8)
 
-def open_file_explorer(event):
-    global image
-    app = QApplication(sys.argv)
-    file_dialog = QFileDialog()
-    image_path, _ = file_dialog.getOpenFileName(None, "Select Image", "", "Images (*.png *.jpg *.bmp)")
-    if image_path:
-        image = mpimg.imread(image_path)
-        update_image(ax_img1, ax_hist, image)
-    app.exit()
+        # Apply threshold independently to each channel
+        for i in range(3):
+            channel = image[:, :, i]
+            threshold = compute_threshold(channel, initial_threshold, epsilon)
+            thresholds.append(threshold)
+            binary_image[:, :, i] = np.where(channel > threshold, 255, 0)
 
-class ThresholdDialog(QDialog):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Set Threshold Values")
+        return binary_image.astype(np.float32) / 255.0, thresholds
 
-        layout = QVBoxLayout()
-        self.red_input = QLineEdit(self)
-        self.green_input = QLineEdit(self)
-        self.blue_input = QLineEdit(self)
 
-        layout.addWidget(QLabel("Red Threshold:"))
-        layout.addWidget(self.red_input)
-        layout.addWidget(QLabel("Green Threshold:"))
-        layout.addWidget(self.green_input)
-        layout.addWidget(QLabel("Blue Threshold:"))
-        layout.addWidget(self.blue_input)
+# Example usage
+image_path = 'images/baboon.png'  # Replace with your actual image path
+image = plt.imread(image_path).astype(np.float32)
 
-        submit_button = QPushButton("Apply", self)
-        submit_button.clicked.connect(self.accept)
-        layout.addWidget(submit_button)
+# Display histograms of each channel to understand pixel distribution
+plot_histograms(image)
 
-        self.setLayout(layout)
+# Apply the color-preserving threshold
+binary_image, thresholds = automatic(image)
 
-    def get_values(self):
-        """Retrieve threshold values or return None if input is invalid."""
-        try:
-            r = int(self.red_input.text())
-            g = int(self.green_input.text())
-            b = int(self.blue_input.text())
-            return r, g, b
-        except ValueError:
-            return None  # Invalid input
+# Display thresholds for each channel
+print("Thresholds for each channel:", thresholds)
 
-def open_threshold_dialog():
-    """Open the threshold dialog and return user input values."""
-    app = QApplication(sys.argv)
-    dialog = ThresholdDialog()
-    values = None
-    if dialog.exec_() == QDialog.Accepted:
-        values = dialog.get_values()
-    app.exit()
-    return values
+# Plot results for verification
+fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+ax[0].imshow(image.astype(np.uint8))
+ax[0].set_title('Original Image')
+ax[0].axis('off')
 
-def apply_threshold(event):
-    """Handle the threshold application logic."""
-    values = open_threshold_dialog()
-    if values:
-        print(f"Thresholds - Red: {values[0]}, Green: {values[1]}, Blue: {values[2]}")
-        # TODO: Apply thresholding logic here using the retrieved values
-    else:
-        print("Invalid input. Please enter valid integer values for all thresholds.")
+ax[1].imshow(binary_image)
+ax[1].set_title(f'Color Thresholded Image\n(R={thresholds[0]}, G={thresholds[1]}, B={thresholds[2]})')
+ax[1].axis('off')
 
-# Initialize default image
-image = np.zeros((256, 256, 3), dtype=np.uint8)
-
-fig = plt.figure(figsize=(10, 5))
-gs = gridspec.GridSpec(2, 3, width_ratios=[1, 1, 1])
-
-ax_img1 = fig.add_subplot(gs[0, 0])
-ax_img1.imshow(image, cmap='Greys_r')
-ax_img1.set_title('Input Image')
-ax_img1.axis('off')
-
-ax_img2 = fig.add_subplot(gs[0, 2])
-ax_img2.imshow(image, cmap='Greys_r')
-ax_img2.set_title('Output Image')
-ax_img2.axis('off')
-
-ax_button_open = plt.axes([0.1, 0.05, 0.15, 0.075])
-ax_button_thresh = plt.axes([0.35, 0.05, 0.15, 0.075])
-
-button_open_file = Button(ax_button_open, 'Open Image')
-button_threshold = Button(ax_button_thresh, 'Set Thresholds')
-
-button_open_file.on_clicked(open_file_explorer)
-button_threshold.on_clicked(apply_threshold)
-
-ax_hist = fig.add_subplot(gs[0, 1])
-plot_histograms(image, ax_hist)
-
-plt.tight_layout()
 plt.show()

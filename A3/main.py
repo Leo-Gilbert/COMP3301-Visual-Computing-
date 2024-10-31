@@ -9,8 +9,14 @@ import threshold_dialog
 import threshold_methods
 
 def btn_automatic(event):
-    imgthresh = threshold_methods.automatic(image)
+    imgthresh, thresholds = threshold_methods.automatic(image)
     update_image(ax_img2, ax_hist, imgthresh)
+    lines = []
+    for i in range(len(imgthresh.shape)):
+        thresh_line = plt.vlines(x=thresholds[i], ymin=0, ymax=1, colors='green', ls=':', lw=1, label='Threshold Value')
+        lines.append(thresh_line)
+    ax_hist.legend(handles=lines, loc='upper center', bbox_to_anchor=(0.5, 1.2))
+
 def btn_manual(event):
     thresh_val = text_threshold.text
     try:
