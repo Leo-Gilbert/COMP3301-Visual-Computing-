@@ -97,3 +97,55 @@ def sobel_edge_detection(image):
     magnitude = np.sqrt(grad_x**2 + grad_y**2)
     magnitude = (magnitude / magnitude.max()) * 255  # Normalize
     return magnitude.astype(np.uint8)
+
+def gaussian_kernel(size, sigma=1.0):
+    kernel_size = size // 2
+    x = np.arange(-kernel_size, kernel_size + 1)
+    gaussian_1d = np.exp(-(x ** 2) / (2.0 * sigma ** 2))
+    gaussian_1d /= gaussian_1d.sum()
+    return gaussian_1d
+
+def gaussian_filter(image, sigma, kernel_size=5):
+    kernel_1d = gaussian_kernel(kernel_size, sigma)
+
+    if len(image.shape) == 2:
+        image = np.expand_dims(image, axis=2)
+
+    height, width, channels = image.shape
+    filtered_image = np.zeros_like(image, dtype=float)
+
+    for c in range(channels):
+        # Horizontal pass
+        for i in range(height):
+            for j in range(width):
+                start_col = clamp(j - 2, 0, width - 1)
+                end_col = clamp(j + 3, 0, width)
+                slice_ = image[i, start_col:end_col, c]
+                if slice_.shape[0] < kernel_size:
+                    slice_ = np.pad(slice_, (0, kernel_size - slice_.shape[0]), mode='edge')
+
+                filtered_image[i, j, c] = np.sum(slice_ * kernel_1d)
+
+        # Vertical pass
+        for j in range(width):
+            for i in range(height):
+                start_row = clamp(i - 2, 0, height - 1)
+                end_row = clamp(i + 3, 0, height)
+                slice_ = filtered_image[start_row:end_row, j, c]
+                if slice_.shape[0] < kernel_size:
+                    slice_ = np.pad(slice_, (0, kernel_size - slice_.shape[0]), mode='edge')
+                filtered_image[i, j, c] = np.sum(slice_ * kernel_1d)
+
+    # Normalize the filtered image to stay within the valid range
+    if image.max() <= 1.0:
+        filtered_image = np.clip(filtered_image, 0, 1)
+    else:
+        filtered_image = np.clip(filtered_image, 0, 255).astype(np.uint8)
+
+    if filtered_image.shape[2] == 1:
+        filtered_image = np.squeeze(filtered_image)
+
+    return filtered_image
+
+def clamp(x, lower, upper):
+    return max(lower, min(x, upper))

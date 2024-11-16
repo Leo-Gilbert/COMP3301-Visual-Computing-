@@ -21,7 +21,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import matplotlib.image as mpimg
-from scipy.ndimage import gaussian_filter
 from PyQt5.QtWidgets import QApplication, QFileDialog
 import helpers
 
@@ -55,7 +54,7 @@ def on_sobel_button(event):
     global transformed_image, edge_detected, blurred_image
     if transformed_image is not None:
         transformed_image = helpers.sobel_edge_detection(transformed_image)
-        blurred_image = gaussian_filter(current_image.astype(float), sigma=3)
+        blurred_image = helpers.gaussian_filter(current_image.astype(float), sigma=3)
         edge_detected = True
         update_display(ax_original, ax_transformed, current_image, transformed_image)
 
