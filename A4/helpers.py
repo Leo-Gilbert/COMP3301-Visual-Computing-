@@ -149,3 +149,104 @@ def gaussian_filter(image, sigma, kernel_size=5):
 
 def clamp(x, lower, upper):
     return max(lower, min(x, upper))
+
+def gaussian_blur(image, kernel_size=5, sigma=1.4):
+    # Create Gaussian kernel
+    ax = np.linspace(-(kernel_size // 2), kernel_size // 2, kernel_size)
+    gauss = np.exp(-0.5 * (ax / sigma) ** 2)
+    kernel = np.outer(gauss, gauss)
+    kernel /= kernel.sum()
+    # Convolve with the image
+    return convolve(image, kernel)
+
+def compute_gradients(image):
+    sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
+    sobel_y = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]])
+    grad_x = convolve(image, sobel_x)
+    grad_y = convolve(image, sobel_y)
+    magnitude = np.sqrt(grad_x**2 + grad_y**2)
+    direction = np.arctan2(grad_y, grad_x) * (180.0 / np.pi)  # Convert to degrees
+    direction = (direction + 180) % 180  # Normalize to [0, 180]
+    return magnitude, direction
+
+def non_maximum_suppression(magnitude, direction):
+    suppressed = np.zeros_like(magnitude)
+    rows, cols = magnitude.shape
+
+    for i in range(1, rows - 1):
+        for j in range(1, cols - 1):
+            angle = direction[i, j]
+            q = 255
+            r = 255
+
+            # Check direction
+            if (0 <= angle < 22.5) or (157.5 <= angle <= 180):
+                q = magnitude[i, j + 1]
+                r = magnitude[i, j - 1]
+            elif 22.5 <= angle < 67.5:
+                q = magnitude[i + 1, j - 1]
+                r = magnitude[i - 1, j + 1]
+            elif 67.5 <= angle < 112.5:
+                q = magnitude[i + 1, j]
+                r = magnitude[i - 1, j]
+            elif 112.5 <= angle < 157.5:
+                q = magnitude[i - 1, j - 1]
+                r = magnitude[i + 1, j + 1]
+
+            if magnitude[i, j] >= q and magnitude[i, j] >= r:
+                suppressed[i, j] = magnitude[i, j]
+            else:
+                suppressed[i, j] = 0
+
+    return suppressed
+
+def double_threshold(image, low_threshold, high_threshold):
+    """Apply double thresholding."""
+    strong = 255
+    weak = 75
+
+    result = np.zeros_like(image)
+    strong_row, strong_col = np.where(image >= high_threshold)
+    weak_row, weak_col = np.where((image >= low_threshold) & (image < high_threshold))
+
+    result[strong_row, strong_col] = strong
+    result[weak_row, weak_col] = weak
+
+    return result, strong, weak
+
+def edge_tracking(image, strong, weak):
+    """Track edges by hysteresis."""
+    rows, cols = image.shape
+    for i in range(1, rows - 1):
+        for j in range(1, cols - 1):
+            if image[i, j] == weak:
+                if (image[i + 1, j - 1] == strong or image[i + 1, j] == strong or image[i + 1, j + 1] == strong
+                        or image[i, j - 1] == strong or image[i, j + 1] == strong
+                        or image[i - 1, j - 1] == strong or image[i - 1, j] == strong or image[i - 1, j + 1] == strong):
+                    image[i, j] = strong
+                else:
+                    image[i, j] = 0
+    return image
+
+def canny_edge_detection(image, low_threshold=50, high_threshold=125):
+    # Ensure grayscale
+    if len(image.shape) == 3:
+        image = np.dot(image[..., :3], [0.2989, 0.5870, 0.1140]).astype(np.uint8)
+
+    # Gaussian smoothing
+    blurred = gaussian_blur(image)
+
+    # Gradient calculation
+    magnitude, direction = compute_gradients(blurred)
+
+    # Non-maximum suppression
+    thin_edges = non_maximum_suppression(magnitude, direction)
+
+    # Double thresholding
+    thresholded, strong, weak = double_threshold(thin_edges, low_threshold, high_threshold)
+
+    # Edge tracking by hysteresis
+    final_edges = edge_tracking(thresholded, strong, weak)
+
+    return final_edges
+

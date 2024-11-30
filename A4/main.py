@@ -2,9 +2,10 @@
 Name: Léo Gilbert
 Student #: 202038196
 
-This program provides a user interface, which allows the user to convert color images to grayscale, use sobel edge
-to detect edges, as well as draw lines, circles, and triangles. All image processing related helper functions can be
-found in helpers.py
+This program provides a user interface, which allows the user to convert color images to grayscale, use sobel and canny
+edge detectors to detect edges, as well as draw lines, circles, and triangles. The UI also includes text boxes for upper
+and lower threshold values for canny detection. All image processing related  helper functions can be found in
+helpers.py.
 
 The code uses MatPlotLib, but only for gui related tasks, not for any of the actual image processing.
 
@@ -19,10 +20,13 @@ pip install matplotlib
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
+from matplotlib.widgets import Button, TextBox
 import matplotlib.image as mpimg
 from PyQt5.QtWidgets import QApplication, QFileDialog
 import helpers
+
+low_threshold = 50
+high_threshold = 150
 
 def update_display(original_ax, transformed_ax, original_image, transformed_image):
     original_ax.clear()
@@ -58,6 +62,18 @@ def on_sobel_button(event):
         edge_detected = True
         update_display(ax_original, ax_transformed, current_image, transformed_image)
 
+def on_canny_button(event):
+    global transformed_image, low_threshold, high_threshold
+    if transformed_image is not None:
+        try:
+            # Parse the threshold values
+            low = int(low_threshold_box.text)
+            high = int(high_threshold_box.text)
+            transformed_image = helpers.canny_edge_detection(transformed_image, low_threshold=low, high_threshold=high)
+            update_display(ax_original, ax_transformed, current_image, transformed_image)
+        except ValueError:
+            print("Invalid threshold values. Please enter integers.")
+
 
 def on_canvas_click(event):
     global click_points, transformed_image
@@ -77,6 +93,11 @@ def on_canvas_click(event):
             update_display(ax_original, ax_transformed, current_image, transformed_image)
             click_points = []
 
+def on_reset_button(event):
+    global transformed_image
+    if current_image is not None:
+        transformed_image = current_image.copy()
+        update_display(ax_original, ax_transformed, current_image, transformed_image)
 
 def on_line_button(event):
     global mode, click_points
@@ -155,5 +176,20 @@ button_triangle.on_clicked(on_triangle_button)
 ax_button_circle = plt.axes([0.55, 0.05, 0.2, 0.075])
 button_circle = Button(ax_button_circle, 'Circle')
 button_circle.on_clicked(on_circle_button)
+
+ax_button_canny = plt.axes([0.8, 0.05, 0.2, 0.075])  # Adjust position as needed
+button_canny = Button(ax_button_canny, 'Canny Edge')
+button_canny.on_clicked(on_canny_button)
+
+ax_low_threshold = plt.axes([0.2, 0.25, 0.15, 0.05])
+low_threshold_box = TextBox(ax_low_threshold, 'Low Threshold', initial=str(low_threshold))
+
+ax_high_threshold = plt.axes([0.53, 0.25, 0.15, 0.05])
+high_threshold_box = TextBox(ax_high_threshold, 'High Threshold', initial=str(high_threshold))
+
+# Add the Reset button to the layout
+ax_button_reset = plt.axes([0.7, 0.25, 0.15, 0.05])  # Adjust position and size as needed
+button_reset = Button(ax_button_reset, 'Reset Image')
+button_reset.on_clicked(on_reset_button)
 
 plt.show()
